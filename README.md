@@ -50,34 +50,24 @@ credit-risk-model/
 ├── .gitignore
 └── README.md
 ```
+## Task 3 - Feature Engineering
 
-## Task 2 — Exploratory Data Analysis (EDA)
+In this task, we developed an automated, reproducible feature engineering pipeline to transform raw eCommerce transaction data into model-ready inputs for credit risk modeling.
 
-The goal of this task is to understand the dataset, find patterns, check data quality, and develop early ideas that will guide feature engineering for the credit risk model.
+### Objectives
+- Aggregate customer transaction data to create summary features such as total transaction amount, average transaction amount, transaction count, and transaction amount variability.
+- Extract temporal features (hour, day, month, year) from transaction timestamps.
+- Encode categorical variables using One-Hot Encoding with proper handling of missing values.
+- Impute missing values in numerical and categorical features to ensure data quality.
+- Normalize and standardize numerical features to bring them onto a comparable scale.
+- Implement the entire transformation as a reusable `sklearn.pipeline.Pipeline` to guarantee consistent preprocessing during training and inference.
 
-### Steps Completed
+### Implementation Details
+- The feature engineering logic is encapsulated in `src/data_processing.py`.
+- Custom transformers for aggregate and time-based features extend `sklearn.base.BaseEstimator` and `TransformerMixin`.
+- Categorical and numerical features are processed using `ColumnTransformer` with `SimpleImputer`, `OneHotEncoder`, and `StandardScaler`.
+- Unit tests in `tests/test_data_processing.py` ensure pipeline correctness and robustness.
 
-- Loaded the dataset with 95,662 rows and 16 columns.
+This pipeline forms a critical step towards building reliable credit risk models by ensuring consistent and meaningful feature extraction from raw transaction data.
 
-- Checked data types: Most columns are categorical (object), and a few are numeric (Amount, Value, CountryCode, PricingStrategy, FraudResult).
-
-- Used describe() to check min, max, mean, and standard deviation for numeric features.
-
-- Found Amount and Value have wide ranges, from large negatives to large positives — indicating refunds/credits and possible outliers.
-
-- Checked for missing values — none found. The dataset is complete.
-
-- Noted extreme values in Amount and Value from the summary stats. Will confirm these using box plots in the next EDA step.
-
-### Key Insights So Far
-
-- Complete Data: No missing values.
-
-- Single Country: All transactions use CountryCode = 256.
-
-- Large Value Spread: Transaction amounts show a big range with possible outliers.
-
-- Fraud Data: FraudResult is very rare (only ~0.2%) but might help define risky users.
-
-- Well-Structured Data: All columns are clearly named and understandable.
 
