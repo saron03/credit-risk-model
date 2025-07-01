@@ -51,33 +51,15 @@ credit-risk-model/
 └── README.md
 ```
 
-## Task 2 — Exploratory Data Analysis (EDA)
+## Task 4 - Proxy Target Variable Engineering
 
-The goal of this task is to understand the dataset, find patterns, check data quality, and develop early ideas that will guide feature engineering for the credit risk model.
+Since the dataset lacks a direct label indicating credit risk (i.e., whether a customer will default), we create a proxy target variable to identify high-risk customers.
 
-### Steps Completed
+### Approach:
+- **Calculate RFM Metrics:** For each customer, we compute Recency (how recently they transacted), Frequency (how often), and Monetary (total transaction value) using their transaction history.
+- **Cluster Customers:** Using scaled RFM features, we apply K-Means clustering (with 3 clusters) to segment customers based on their engagement and transaction behavior.
+- **Define High-Risk Group:** By analyzing clusters, we label the group with the lowest engagement and transaction value as "high risk."
+- **Create Target Column:** A binary `is_high_risk` column is added, where 1 indicates a high-risk customer and 0 otherwise.
+- **Integration:** This proxy target variable is merged back into the processed dataset for use in training credit risk prediction models.
 
-- Loaded the dataset with 95,662 rows and 16 columns.
-
-- Checked data types: Most columns are categorical (object), and a few are numeric (Amount, Value, CountryCode, PricingStrategy, FraudResult).
-
-- Used describe() to check min, max, mean, and standard deviation for numeric features.
-
-- Found Amount and Value have wide ranges, from large negatives to large positives — indicating refunds/credits and possible outliers.
-
-- Checked for missing values — none found. The dataset is complete.
-
-- Noted extreme values in Amount and Value from the summary stats. Will confirm these using box plots in the next EDA step.
-
-### Key Insights So Far
-
-- Complete Data: No missing values.
-
-- Single Country: All transactions use CountryCode = 256.
-
-- Large Value Spread: Transaction amounts show a big range with possible outliers.
-
-- Fraud Data: FraudResult is very rare (only ~0.2%) but might help define risky users.
-
-- Well-Structured Data: All columns are clearly named and understandable.
-
+This proxy allows us to train supervised models to estimate credit risk even without explicit default data.
