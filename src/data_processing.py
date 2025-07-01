@@ -1,100 +1,131 @@
-# data_processing.py
+# train.py
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+import mlflow
+import mlflow.sklearn
 import pandas as pd
-import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+import joblib
+import os
+from src.data_processing import build_pipeline
 
-class ExtractTimeFeatures(BaseEstimator, TransformerMixin):
-    def fit(self, X, y=None):
-        return self
-    def transform(self, X):
-        X = X.copy()
-        X['TransactionStartTime'] = pd.to_datetime(X['TransactionStartTime'])
-        X['TransactionHour'] = X['TransactionStartTime'].dt.hour
-        X['TransactionDay'] = X['TransactionStartTime'].dt.day
-        X['TransactionMonth'] = X['TransactionStartTime'].dt.month
-        X['TransactionYear'] = X['TransactionStartTime'].dt.year
-        return X
+def load_data(path="data/processed/processed_data_with_target.csv"):
+    data = pd.read_csv(path)
+    print("Columns in dataset:", data.columns.tolist())
+    drop_columns = ["TransactionId", "BatchId", "AccountId", "SubscriptionId", "ProductId", "FraudResult"]
+    drop_columns = [col for col in drop_columns if col in data.columns]
+    data = data.drop(columns=drop_columns, errors='ignore')
+    print("Raw data NaN counts:\n", data.isna().sum())
+    print("Target distribution:\n", data['is_high_risk'].value_counts(normalize=True))
+    return data
 
-class AggregateFeatures(BaseEstimator, TransformerMixin):
-    def __init__(self):
-        self.feature_names_ = None
+def evaluate_model(y_true, y_pred, y_proba):
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, zero_division=0),
+        "recall": recall_score(y_true, y_pred, zero_division=0),
+        "f1_score": f1_score(y_true, y_pred, zero_division=0),
+        "roc_auc": roc_auc_score(y_true, y_proba)
+    }
+    return metrics
+
+def train_and_evaluate():
+    data = load_data()
+    target_column = "is_high_risk"
+    if target_column not in data.columns:
+        raise ValueError(f"Target column '{target_column}' not found in dataset. Available columns: {data.columns.tolist()}")
     
-    def fit(self, X, y=None):
-        return self
+    X = data.drop(columns=[target_column])
+    y = data[target_column]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    pipeline = build_pipeline()
+    customer_id_train = X_train["CustomerId"]
+    customer_id_test = X_test["CustomerId"]
     
-    def transform(self, X):
-        if self.feature_names_ is None:
-            raise ValueError("Feature names not set. Ensure the transformer is used within a fitted pipeline.")
-        
-        # Convert NumPy array to DataFrame
-        X_df = pd.DataFrame(X, columns=self.feature_names_)
-        
-        # Identify the correct column names for CustomerId and Amount
-        customer_id_col = [col for col in X_df.columns if col.endswith('CustomerId')][0]
-        amount_col = [col for col in X_df.columns if col.endswith('Amount')][0]
-        
-        # Check if required columns are present
-        if customer_id_col not in X_df.columns or amount_col not in X_df.columns:
-            raise ValueError("Required columns for CustomerId and Amount are missing from the input data")
-        
-        # Perform aggregation
-        agg_df = X_df.groupby(customer_id_col).agg(
-            TotalTransactionAmount=(amount_col, 'sum'),
-            AverageTransactionAmount=(amount_col, 'mean'),
-            TransactionCount=(customer_id_col, 'count'),
-            StdTransactionAmount=(amount_col, 'std')
-        ).reset_index()
-        
-        # Rename the grouped column back to CustomerId for clarity
-        agg_df.columns = ['CustomerId'] + [col for col in agg_df.columns if col != customer_id_col]
-        return agg_df
-
-def build_pipeline():
-    categorical_features = ['CurrencyCode', 'CountryCode', 'ProviderId',
-                           'ProductCategory', 'ChannelId', 'PricingStrategy']
-    numerical_features = ['Amount', 'Value']
-    passthrough_features = ['CustomerId']
-
-    categorical_transformer = Pipeline([
-        ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore'))
-    ])
-    numerical_transformer = Pipeline([
-        ('imputer', SimpleImputer(strategy='mean')),
-        ('scaler', StandardScaler())
-    ])
-    preprocessor = ColumnTransformer([
-        ('num', numerical_transformer, numerical_features),
-        ('cat', categorical_transformer, categorical_features),
-        ('passthrough', 'passthrough', passthrough_features)
-    ])
-
-    pipeline = Pipeline([
-        ('time_features', ExtractTimeFeatures()),
-        ('preprocessor', preprocessor),
-        ('aggregate', AggregateFeatures())
-    ])
-
-    # Override fit_transform to set feature names for AggregateFeatures
-    original_fit_transform = pipeline.fit_transform
-    def fit_transform_with_feature_names(X, y=None):
-        # Fit the pipeline up to the preprocessor
-        X_transformed = pipeline.named_steps['time_features'].fit_transform(X, y)
-        X_transformed = pipeline.named_steps['preprocessor'].fit_transform(X_transformed, y)
-        
-        # Get feature names from preprocessor
-        feature_names = pipeline.named_steps['preprocessor'].get_feature_names_out()
-        
-        # Set feature names in AggregateFeatures
-        pipeline.named_steps['aggregate'].feature_names_ = feature_names
-        
-        # Complete the transformation
-        return pipeline.named_steps['aggregate'].fit_transform(X_transformed, y)
+    X_train_transformed = pipeline.fit_transform(X_train)
+    X_test_transformed = pipeline.transform(X_test)
     
-    pipeline.fit_transform = fit_transform_with_feature_names
-    return pipeline
+    y_train_agg = pd.DataFrame({"CustomerId": customer_id_train, target_column: y_train})
+    y_train_agg = y_train_agg.groupby("CustomerId")[target_column].max().reset_index()
+    y_test_agg = pd.DataFrame({"CustomerId": customer_id_test, target_column: y_test})
+    y_test_agg = y_test_agg.groupby("CustomerId")[target_column].max().reset_index()
+    
+    X_train_transformed = X_train_transformed.merge(y_train_agg, on="CustomerId", how="inner")
+    y_train_transformed = X_train_transformed[target_column]
+    X_train_transformed = X_train_transformed.drop(columns=[target_column, "CustomerId"])
+    
+    X_test_transformed = X_test_transformed.merge(y_test_agg, on="CustomerId", how="inner")
+    y_test_transformed = X_test_transformed[target_column]
+    X_test_transformed = X_test_transformed.drop(columns=[target_column, "CustomerId"])
+
+    # Convert all columns to float64 to address MLflow warning
+    X_train_transformed = X_train_transformed.astype('float64')
+    X_test_transformed = X_test_transformed.astype('float64')
+
+    # Debug: Check transformed data
+    print("X_train_transformed columns:", X_train_transformed.columns.tolist())
+    print("X_train_transformed NaN counts:\n", X_train_transformed.isna().sum())
+    print("X_train_transformed head:\n", X_train_transformed.head())
+
+    # Create models directory
+    os.makedirs("models", exist_ok=True)
+
+    models = {
+        "LogisticRegression": LogisticRegression(max_iter=1000, solver='liblinear', class_weight='balanced'),
+        "RandomForest": RandomForestClassifier(random_state=42, class_weight='balanced')
+    }
+
+    param_grids = {
+        "LogisticRegression": {
+            "C": [0.01, 0.1, 1, 10],
+            "penalty": ["l1", "l2"]
+        },
+        "RandomForest": {
+            "n_estimators": [50, 100],
+            "max_depth": [5, 10, None],
+            "min_samples_split": [2, 5]
+        }
+    }
+
+    best_model_name = None
+    best_model = None
+    best_score = 0
+    best_params = None
+
+    mlflow.set_experiment("Credit Risk Model Training")
+
+    for model_name, model in models.items():
+        print(f"Training {model_name}...")
+        grid = GridSearchCV(model, param_grids[model_name], cv=3, scoring="roc_auc", n_jobs=-1)
+        grid.fit(X_train_transformed, y_train_transformed)
+
+        y_pred = grid.predict(X_test_transformed)
+        y_proba = grid.predict_proba(X_test_transformed)[:, 1]
+
+        metrics = evaluate_model(y_test_transformed, y_pred, y_proba)
+        print(f"{model_name} metrics:", metrics)
+
+        input_example = X_train_transformed.iloc[:5]
+        with mlflow.start_run(run_name=model_name):
+            mlflow.log_params(grid.best_params_)
+            mlflow.log_metrics(metrics)
+            mlflow.sklearn.log_model(grid.best_estimator_, name=model_name, input_example=input_example)
+
+        if metrics["roc_auc"] > best_score:
+            best_score = metrics["roc_auc"]
+            best_model = grid.best_estimator_
+            best_model_name = model_name
+            best_params = grid.best_params_
+
+    print(f"Best model: {best_model_name} with ROC-AUC: {best_score}")
+    mlflow.sklearn.log_model(best_model, name="best_model", input_example=input_example, registered_model_name="CreditRiskModel")
+    joblib.dump(best_model, "models/best_model.joblib")
+
+if __name__ == "__main__":
+    train_and_evaluate()
