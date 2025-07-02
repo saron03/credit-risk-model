@@ -8,8 +8,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 import joblib
+
 import os
+import sys
+print(sys.path)
 from src.data_processing import build_pipeline
+
 
 def load_data(path="data/processed/processed_data_with_target.csv"):
     data = pd.read_csv(path)
