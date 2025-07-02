@@ -50,34 +50,17 @@ credit-risk-model/
 ├── .gitignore
 └── README.md
 ```
+# Task 6 - Model Deployment and Continuous Integration
 
-## Task 2 — Exploratory Data Analysis (EDA)
+This project packages a trained credit risk model into a containerized FastAPI service and sets up a CI/CD pipeline to automate testing and ensure code quality.
 
-The goal of this task is to understand the dataset, find patterns, check data quality, and develop early ideas that will guide feature engineering for the credit risk model.
+## Features
 
-### Steps Completed
-
-- Loaded the dataset with 95,662 rows and 16 columns.
-
-- Checked data types: Most columns are categorical (object), and a few are numeric (Amount, Value, CountryCode, PricingStrategy, FraudResult).
-
-- Used describe() to check min, max, mean, and standard deviation for numeric features.
-
-- Found Amount and Value have wide ranges, from large negatives to large positives — indicating refunds/credits and possible outliers.
-
-- Checked for missing values — none found. The dataset is complete.
-
-- Noted extreme values in Amount and Value from the summary stats. Will confirm these using box plots in the next EDA step.
-
-### Key Insights So Far
-
-- Complete Data: No missing values.
-
-- Single Country: All transactions use CountryCode = 256.
-
-- Large Value Spread: Transaction amounts show a big range with possible outliers.
-
-- Fraud Data: FraudResult is very rare (only ~0.2%) but might help define risky users.
-
-- Well-Structured Data: All columns are clearly named and understandable.
-
+- **FastAPI REST API** that loads the best model from the MLflow registry.
+- `/predict` endpoint accepts customer data and returns risk probabilities.
+- Request and response data validated using Pydantic models.
+- **Dockerized** service with a `Dockerfile` and `docker-compose.yml` for easy build and deployment.
+- **CI/CD pipeline** configured via GitHub Actions to:
+  - Run code linting with `flake8`.
+  - Execute unit tests using `pytest`.
+- Build fails if linting or tests do not pass, ensuring code quality.
